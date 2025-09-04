@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Инцидент · Просмотр + привязка риска (прототип)</title>
+<style>
+  :root{
+    --bg:#f6f8fb; --card:#fff; --panel:#f8fafc; --border:#e6e9ef; --muted:#64748b; --text:#0f172a;
+    --primary:#22c55e; --primary-d:#16a34a; --blue:#3b82f6; --warn:#f59e0b; --danger:#ef4444;
+    --okbg:#ecfdf5; --okbd:#a7f3d0; --warnbg:#fff7ed; --warnbd:#f59e0b; --errbg:#fef2f2; --errbd:#fecaca;
+    --radius:16px; --shadow:0 20px 40px rgba(16,24,40,.12);
+  }
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  .wrap{padding:28px;display:flex;align-items:center;justify-content:center}
+  .modal{width:min(1120px,96vw);background:var(--card);border:1px solid var(--border);border-radius:24px;box-shadow:var(--shadow);overflow:hidden}
+  .head{display:flex;align-items:center;gap:12px;padding:18px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#fff 0%,#f8fafc 100%)}
+  .title{margin:0;font-size:18px;font-weight:700}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:#fff;font-size:12px;color:var(--muted)}
+  .chip.ok{background:var(--okbg);border-color:var(--okbd);color:#065f46}
+  .chip.warn{background:var(--warnbg);border-color:var(--warnbd);color:#92400e}
+  .chip.err{background:var(--errbg);border-color:var(--errbd);color:#991b1b}
+  .content{display:grid;grid-template-columns:1fr 300px;gap:16px;padding:16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .card-h{padding:12px 14px;border-bottom:1px solid var(--border);font-weight:600}
+  .card-b{padding:14px}
+  .row{display:flex;justify-content:space-between;gap:10px}
+  .muted{color:var(--muted);font-size:12px}
+  .alert{display:none;margin:0 0 8px 0;border:1px solid var(--border);background:var(--panel);border-radius:14px;padding:12px 14px;align-items:center;gap:10px}
+  .alert.show{display:flex}
+  .btn{border:1px solid var(--border);background:#fff;color:var(--text);padding:10px 12px;border-radius:12px;cursor:pointer}
+  .btn:hover{background:#f9fafb} .btn.primary{background:linear-gradient(180deg,var(--primary),var(--primary-d));color:#fff;border-color:#12a150}
+  .btn.ghost{color:var(--blue);border-color:#bfdbfe;background:#fff}
+  .btn.danger{color:#b91c1c;border-color:#fecaca}
+  .block{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .badge{padding:4px 8px;border:1px solid var(--border);border-radius:999px;background:#f3f4f6;font-size:12px;color:#374151}
+  .riskline{display:flex;align-items:center;gap:10px;justify-content:space-between}
+  .sticky{position:sticky;bottom:0;padding:10px;border-top:1px solid var(--border);background:#ffffffcc;backdrop-filter:blur(4px);display:flex;gap:8px;justify-content:flex-end}
+
+  /* Drawer */
+  .drawer{position:fixed;inset:0;pointer-events:none}
+  .drawer .shade{position:absolute;inset:0;background:rgba(15,23,42,.35);opacity:0;transition:.2s}
+  .drawer .panel{position:absolute;right:-420px;top:0;width:420px;height:100%;background:#fff;border-left:1px solid var(--border);box-shadow:var(--shadow);transition:.25s;padding:16px 16px 80px}
+  .drawer.show{pointer-events:auto}
+  .drawer.show .shade{opacity:1}
+  .drawer.show .panel{right:0}
+  .drawer h3{margin:4px 0 12px;font-size:16px}
+  .input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:12px}
+  .hl{margin:12px 0 8px;font-size:12px;color:var(--muted)}
+  .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:#fff;border-radius:999px;padding:6px 10px;margin:6px 6px 0 0;cursor:pointer}
+  .item{padding:10px;border:1px solid var(--border);border-radius:12px;margin-top:8px;cursor:pointer}
+  .item:hover{background:#f9fafb}
+  .drawer .footer{position:absolute;left:0;right:0;bottom:0;padding:10px;border-top:1px solid var(--border);background:#fff;display:flex;gap:8px;justify-content:flex-end}
+
+  /* Toast */
+  .toast{position:fixed;right:16px;bottom:16px;background:#111827;color:#fff;padding:12px 14px;border-radius:12px;box-shadow:var(--shadow);opacity:0;transform:translateY(10px);transition:.25s}
+  .toast.show{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="modal">
+    <div class="head">
+      <h1 class="title">Недобросовестные практики продаж продуктов и услуг</h1>
+      <span id="statusChip" class="chip">На утверждении</span>
+      <span id="escalationChip" class="chip warn" style="display:none">Эскалация: крупный инцидент</span>
+      <span id="staleChip" class="chip" style="display:none">Данные изменились — обновить привязку</span>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn" onclick="simulateEdit()">Изменить причину</button>
+        <button class="btn" onclick="simulateBig()">Сделать крупным</button>
+      </div>
+    </div>
+
+    <!-- Баннер-ассистент (вверху контентной части) -->
+    <div id="topBanner" class="alert"></div>
+
+    <div class="content">
+      <!-- MAIN -->
+      <div>
+        <!-- Потери -->
+        <div class="card">
+          <div class="card-h">Какие потери?</div>
+          <div class="card-b">
+            <div class="row"><div>Прямые</div><strong id="lossDirect">10 000 000 ₽</strong></div>
+            <div class="row"><div>Косвенные</div><strong>5 000 000 ₽</strong></div>
+            <div class="row"><div>Потенциальные</div><strong>5 000 000 ₽</strong></div>
+          </div>
+        </div>
+
+        <!-- Что произошло -->
+        <div class="card" style="margin-top:10px">
+          <div class="card-h">Что произошло?</div>
+          <div class="card-b">
+            <div class="muted">Описание инцидента</div>
+            <div id="desc" style="margin:6px 0 12px">Обнаружена пропажа статуэтки гигантского гуся в офисе продаж №204.</div>
+            <div class="muted">Профиль риска</div>
+            <div>Повреждение / утрата имущества</div>
+          </div>
+        </div>
+
+        <!-- Где произошло -->
+        <div class="card" style="margin-top:10px">
+          <div class="card-h">Где произошло?</div>
+          <div class="card-b">
+            <div class="muted">Описание инцидента</div>
+            <div>Обнаружена пропажа статуэтки гигантского гуся в офисе продаж №204.</div>
+            <div class="muted" style="margin-top:8px">Структурное подразделение</div>
+            <div>ООО СК Сбербанк страхование · Управление продаж</div>
+          </div>
+        </div>
+
+        <!-- Когда произошло -->
+        <div class="card" style="margin-top:10px">
+          <div class="card-h">Когда произошло?</div>
+          <div class="card-b">
+            <div class="row"><div class="muted">Начало</div><div>20.02.2024 · 17:15</div></div>
+            <div class="row" style="margin-top:6px"><div class="muted">Окончание</div><div>20.02.2024 · 14:23</div></div>
+          </div>
+        </div>
+
+        <!-- Какая причина -->
+        <div class="card" style="margin-top:10px">
+          <div class="card-h">Какая причина?</div>
+          <div class="card-b">
+            <div class="block">
+              <span class="badge">Прочее</span>
+              <strong>Внешнее мошенничество</strong>
+            </div>
+            <div class="muted" style="margin-top:6px">
+              Сотрудник, ответственный за сохранность и использование имущества компании, допустил ошибку или небрежность, что привело к потере или повреждению этого имущества.
+            </div>
+          </div>
+        </div>
+
+        <!-- Связь с риском -->
+        <div class="card" style="margin-top:10px">
+          <div class="card-h">Связь с риском</div>
+          <div class="card-b" id="riskBlock">
+            <!-- динамический контент -->
+          </div>
+          <div class="sticky">
+            <button class="btn" onclick="toast('Сохранено')">Сохранить</button>
+            <button class="btn primary" onclick="approve()">Утвердить</button>
+          </div>
+        </div>
+
+        <!-- Меры -->
+        <div class="card" style="margin-top:10px">
+          <div class="card-h">Меры</div>
+          <div class="card-b">
+            <div class="item" style="cursor:default">Всеобъемлющая стратегия снижения операционных потерь за счёт улучшения внутренних процессов и систем контроля</div>
+          </div>
+        </div>
+
+        <!-- Вложения -->
+        <div class="card" style="margin-top:10px">
+          <div class="card-h">Вложения</div>
+          <div class="card-b">
+            <div class="row"><div>чек №16652.pdf</div><div class="muted">10 МБ ⬇</div></div>
+            <div class="row" style="margin-top:6px"><div>Фото с дмз.jpg</div><div class="muted">10 МБ ⬇</div></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- SIDEBAR -->
+      <div>
+        <div class="card">
+          <div class="card-h">Информация</div>
+          <div class="card-b">
+            <div class="row"><div class="muted">Событие</div><div>EVE-4124001</div></div>
+            <div class="row"><div class="muted">Создано</div><div>01.02.2024</div></div>
+            <div class="row"><div class="muted">Автор</div><div>Самойлидис А. С.</div></div>
+            <div class="row"><div class="muted">Вид</div><div>Выявлено в рамках аудита</div></div>
+            <hr style="border:none;border-top:1px solid var(--border);margin:10px 0">
+            <div class="row"><div class="muted">Привязка</div><div id="sideLink">—</div></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <div class="card-h">Действия</div>
+          <div class="card-b">
+            <button class="btn" style="width:100%;margin-top:6px" onclick="forceNeedsReview()">Смоделировать «Нужна проверка»</button>
+            <button class="btn" style="width:100%;margin-top:6px" onclick="forceError()">Смоделировать ошибку</button>
+            <button class="btn" style="width:100%;margin-top:6px" onclick="openDrawer()">Открыть дровер</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Drawer -->
+<div id="drawer" class="drawer" aria-hidden="true">
+  <div class="shade" onclick="closeDrawer()"></div>
+  <div class="panel" role="dialog" aria-modal="true">
+    <h3>Перепривязка риска</h3>
+    <input id="search" class="input" type="text" placeholder="Поиск по рискам…" oninput="renderDrawer()"/>
+    <div class="hl">Недавние риски вашего подразделения</div>
+    <div id="recent"></div>
+    <div class="hl">Результаты</div>
+    <div id="results"></div>
+    <div class="footer">
+      <button class="btn" onclick="closeDrawer()">Отмена</button>
+      <button id="bindBtn" class="btn primary" disabled onclick="bindSelected()">Привязать</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast">Сохранено</div>
+
+<script>
+  const $ = s => document.querySelector(s);
+  function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.add('show'); clearTimeout(window._t); window._t=setTimeout(()=>el.classList.remove('show'),1500);}
+
+  // --- demo data
+  const ALL_RISKS = [
+    'Недобросовестные практики продаж',
+    'Утечка персональных данных клиентов',
+    'Повреждение / утрата имущества',
+    'Сбой критической ИС',
+    'Нарушение процедуры KYC',
+    'Ошибочная выгрузка данных в CRM',
+  ];
+  const RECENT_RISKS = [
+    'Повреждение / утрата имущества',
+    'Сбой критической ИС',
+    'Утечка персональных данных клиентов'
+  ];
+
+  // --- state
+  const state = {
+    approved: false,
+    big: true,                 // крупный инцидент → эскалация
+    stale: false,              // данные менялись после привязки
+    link: { status: 'pending', source:'ai', name:'', confidence:null }, // pending|linked|needs_review|failed|manual
+    selected: null,            // выбор в дровере
+  };
+
+  // thresholds
+  const CONF_AUTO = 0.85;     // автопривязка
+  const CONF_REVIEW = 0.60;   // нужда в проверке
+
+  // --- render
+  function setSideLink(text){ $('#sideLink').textContent = text; }
+  function setBanner(kind, payload={}){
+    const b = $('#topBanner'); b.innerHTML=''; b.classList.remove('show');
+    const wrap = document.createElement('div'); wrap.style.display='flex'; wrap.style.gap='10px'; wrap.style.alignItems='center'; wrap.style.width='100%';
+
+    const text = document.createElement('div'); text.style.flex='1';
+    const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px';
+
+    if(kind==='pending'){
+      text.innerHTML = 'Подбираю риск… Это займёт пару минут. Работа не блокируется.';
+      actions.append(btn('Перепривязать', openDrawer));
+      b.append(wrap); wrap.append(text, actions); b.classList.add('show'); setSideLink('выполняется');
+    }
+    if(kind==='needs_review'){
+      text.innerHTML = `Похоже, это <b>${payload.name}</b> (${Math.round(payload.confidence*100)}%). Подтвердите?`;
+      actions.append(btn('Подтвердить', ()=>{ state.link={status:'linked',source:'ai',name:payload.name}; render(); toast('Риск подтверждён'); }));
+      actions.append(btn('Выбрать другой', openDrawer));
+      b.append(wrap); wrap.append(text, actions); b.classList.add('show'); setSideLink('требуется проверка');
+    }
+    if(kind==='failed'){
+      text.textContent = 'Не удалось привязать автоматически. Выберите риск вручную или повторите.';
+      actions.append(btn('Выбрать риск', openDrawer));
+      actions.append(btn('Повторить', runAI));
+      b.append(wrap); wrap.append(text, actions); b.classList.add('show'); setSideLink('ошибка');
+    }
+    if(kind==='linked'){
+      text.innerHTML = `Связано с риском: <b>${payload.name}</b>. Утилизация учтена.`;
+      actions.append(btn('Перепривязать', openDrawer));
+      b.append(wrap); wrap.append(text, actions); b.classList.add('show'); setSideLink('связано');
+    }
+    if(kind===null){ setSideLink('—'); }
+  }
+  function btn(label, fn, type){
+    const b=document.createElement('button'); b.className='btn'+(type?(' '+type):''); b.textContent=label; b.onclick=fn; return b;
+  }
+
+  function renderRiskBlock(){
+    const host = $('#riskBlock'); host.innerHTML='';
+    const row = document.createElement('div'); row.className='riskline';
+
+    if(state.link.status==='linked' || state.link.status==='manual'){
+      const left = document.createElement('div');
+      left.innerHTML = `<span class="badge">${state.link.source==='manual'?'Вручную':'AI'}</span> <strong>${state.link.name}</strong>`;
+      const right = document.createElement('div');
+      right.append(btn('Перепривязать', openDrawer));
+      right.append(btn('Отвязать', unlink, 'danger'));
+      row.append(left,right);
+      host.append(row);
+      const hint = document.createElement('div'); hint.className='muted'; hint.style.marginTop='6px';
+      hint.textContent = state.link.source==='manual'
+        ? 'Привязано вручную. Утилизация учтена.'
+        : 'Совпали фразы из описания, профиль и подразделение.';
+      host.append(hint);
+    } else if(state.link.status==='pending'){
+      row.innerHTML = `<span class="muted">Идёт привязка…</span>`;
+      const right = document.createElement('div'); right.append(btn('Перепривязать', openDrawer));
+      row.append(right); host.append(row);
+    } else if(state.link.status==='needs_review'){
+      row.innerHTML = `<span class="muted">Нужна проверка кандидата: <strong>${state.link.name}</strong></span>`;
+      const right = document.createElement('div');
+      right.append(btn('Подтвердить', ()=>{ state.link={status:'linked',source:'ai',name:state.link.name}; render(); toast('Риск подтверждён'); }, 'primary'));
+      right.append(btn('Выбрать другой', openDrawer));
+      row.append(right); host.append(row);
+    } else if(state.link.status==='failed'){
+      row.innerHTML = `<span class="muted">Автоподбор не удался</span>`;
+      const right = document.createElement('div');
+      right.append(btn('Повторить', runAI));
+      right.append(btn('Выбрать вручную', openDrawer));
+      row.append(right); host.append(row);
+    }
+  }
+
+  function renderChips(){
+    $('#escalationChip').style.display = state.big ? '' : 'none';
+    $('#staleChip').style.display = state.stale ? '' : 'none';
+  }
+
+  function render(){
+    renderChips();
+    if(state.link.status==='pending') setBanner('pending');
+    if(state.link.status==='needs_review') setBanner('needs_review', state.link);
+    if(state.link.status==='failed') setBanner('failed');
+    if(state.link.status==='linked' || state.link.status==='manual') setBanner('linked', state.link);
+    renderRiskBlock();
+  }
+
+  // --- actions
+  function approve(){
+    toast('Событие утверждено. Привязка — в фоне.');
+    $('#statusChip').className='chip ok'; $('#statusChip').textContent='Утверждено';
+    runAI();
+  }
+
+  function simulateEdit(){ state.stale = true; renderChips(); }
+  function simulateBig(){ state.big = !state.big; render(); }
+
+  function runAI(){
+    state.stale = false;
+    state.link = { status:'pending', source:'ai', name:'', confidence:null };
+    render();
+    // имитация — быстрее для крупных инцидентов всегда needs_review
+    const delay = 1000 + Math.random()*1500;
+    setTimeout(()=>{
+      const conf = state.big ? 0.72 : Math.random();
+      if(conf >= CONF_AUTO){
+        state.link = { status:'linked', source:'ai', name:'Недобросовестные практики продаж', confidence: conf };
+      } else if(conf >= CONF_REVIEW){
+        state.link = { status:'needs_review', source:'ai', name:'Утечка персональных данных клиентов', confidence: conf };
+      } else {
+        state.link = { status:'failed', source:'ai', name:'', confidence: conf };
+      }
+      render();
+    }, delay);
+  }
+
+  function unlink(){
+    if(confirm('Отвязать текущий риск?')){
+      state.link={status:'pending',source:'ai',name:''};
+      runAI();
+    }
+  }
+
+  function forceNeedsReview(){
+    state.link={status:'needs_review',source:'ai',name:'Повреждение / утрата имущества',confidence:.74};
+    render();
+  }
+  function forceError(){
+    state.link={status:'failed',source:'ai',name:'',confidence:0.2};
+    render();
+  }
+
+  // --- drawer
+  function openDrawer(){
+    $('#drawer').classList.add('show'); $('#search').value=''; state.selected=null; renderDrawer();
+  }
+  function closeDrawer(){ $('#drawer').classList.remove('show'); }
+  function renderDrawer(){
+    const q = ($('#search').value||'').toLowerCase();
+    // recent
+    const r = $('#recent'); r.innerHTML='';
+    RECENT_RISKS.forEach(name=>{
+      const p=document.createElement('span'); p.className='pill'; p.textContent=name;
+      p.onclick=()=>select(name); r.append(p);
+    });
+    // results
+    const res = $('#results'); res.innerHTML='';
+    const list = ALL_RISKS.filter(n=>n.toLowerCase().includes(q)).slice(0,8);
+    if(!list.length){ res.innerHTML='<div class="muted">Ничего не найдено</div>'; }
+    list.forEach(name=>{
+      const it=document.createElement('div'); it.className='item'; it.textContent=name;
+      it.onclick=()=>select(name); res.append(it);
+    });
+    $('#bindBtn').disabled = !state.selected;
+  }
+  function select(name){ state.selected=name; $('#bindBtn').disabled=false; toast(`Выбрано: ${name}`); }
+  function bindSelected(){
+    if(!state.selected) return;
+    // подтверждение замены при уже связанной
+    if(state.link.status==='linked' || state.link.status==='manual'){
+      if(!confirm('Заменить текущую связь?')) return;
+    }
+    // автомагия перерасчёта
+    state.link={status:'manual',source:'manual',name:state.selected};
+    closeDrawer(); render();
+    toast('Связь обновлена. Утилизация перерасчитана.');
+  }
+
+  // init
+  render();
+  // запустим первичный подбор (как будто пришли из формы редактирования)
+  runAI();
+</script>
+</body>
+</html>
